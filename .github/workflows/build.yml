@@ -1,0 +1,124 @@
+name: Build Snake Game
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pygame cx_Freeze
+        
+    - name: Install Linux dependencies
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-dev libasound2-dev libpulse-dev
+        
+    - name: Create setup.py
+      run: |
+        cat > setup.py << 'EOF'
+        from cx_Freeze import setup, Executable
+        import sys
+        
+        build_options = {
+            'packages': ['pygame'],
+            'excludes': [],
+            'include_files': [
+                'head.png',
+                'apple.png',
+                'strart_hiss.mp3',
+                'apple_crunch.wav', 
+                'game_over.mp3'
+            ]
+        }
+        
+        base = 'Win32GUI' if sys.platform == 'win32' else None
+        
+        executables = [
+            Executable('main.py', base=base, target_name='SnakeGame')
+        ]
+        
+        setup(
+            name='Snake Game',
+            version='1.0',
+            description='Classic Snake Game built with Pygame',
+            options={'build_exe': build_options},
+            executables=executables
+        )
+        EOF
+        
+    - name: Build executable
+      run: python setup.py build
+      
+    - name: Create release directory
+      run: |
+        mkdir -p release
+        
+    - name: Copy build files (Linux/Mac)
+      if: runner.os != 'Windows'
+      run: |
+        cp -r build/exe.*/* release/
+        
+    - name: Copy build files (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        xcopy build\exe.win-amd64-3.9\* release\ /E /I
+        
+    - name: Create archive (Linux/Mac)
+      if: runner.os != 'Windows'
+      run: |
+        cd release
+        tar -czf ../SnakeGame-${{ runner.os }}.tar.gz *
+        
+    - name: Create archive (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        cd release
+        7z a ../SnakeGame-Windows.zip *
+        
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: SnakeGame-${{ runner.os }}
+        path: |
+          SnakeGame-*.tar.gz
+          SnakeGame-*.zip
+          
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          */SnakeGame-*.tar.gz
+          */SnakeGame-*.zip
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
