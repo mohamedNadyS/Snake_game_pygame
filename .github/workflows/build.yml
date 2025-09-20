@@ -33,7 +33,8 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y python3-dev libasound2-dev libpulse-dev
         
-    - name: Create setup.py
+    - name: Create setup.py (Linux/Mac)
+      if: runner.os != 'Windows'
       run: |
         cat > setup.py << 'EOF'
         from cx_Freeze import setup, Executable
@@ -65,6 +66,40 @@ jobs:
             executables=executables
         )
         EOF
+        
+    - name: Create setup.py (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        @"
+        from cx_Freeze import setup, Executable
+        import sys
+        
+        build_options = {
+            'packages': ['pygame'],
+            'excludes': [],
+            'include_files': [
+                'head.png',
+                'apple.png',
+                'strart_hiss.mp3',
+                'apple_crunch.wav', 
+                'game_over.mp3'
+            ]
+        }
+        
+        base = 'Win32GUI' if sys.platform == 'win32' else None
+        
+        executables = [
+            Executable('main.py', base=base, target_name='SnakeGame')
+        ]
+        
+        setup(
+            name='Snake Game',
+            version='1.0',
+            description='Classic Snake Game built with Pygame',
+            options={'build_exe': build_options},
+            executables=executables
+        )
+        "@ | Out-File -FilePath setup.py -Encoding utf8
         
     - name: Build executable
       run: python setup.py build
